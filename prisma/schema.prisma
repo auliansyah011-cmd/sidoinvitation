@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum InvitationStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum PaymentStatus {
+  PENDING
+  AWAITING_REVIEW
+  PAID
+  FAILED
+  EXPIRED
+  REJECTED
+}
+
+enum ActivityType {
+  REGISTER
+  LOGIN
+  ADMIN_LOGIN
+  INVITATION_CREATED
+  PAYMENT_CREATED
+  PAYMENT_PROOF_SUBMITTED
+  PAYMENT_REJECTED
+  PAYMENT_PAID
+  USER_DISABLED
+  USER_ENABLED
+}
+
+model User {
+  id               String        @id @default(cuid())
+  name             String
+  username         String        @unique
+  email            String        @unique
+  passwordHash     String
+  role             UserRole      @default(USER)
+  isActive         Boolean       @default(false)
+  paymentCode      Int?          @unique
+  disabledAt       DateTime?
+  lastLoginAt      DateTime?
+  invitations      Invitation[]
+  payments         Payment[]
+  reviewedPayments Payment[]     @relation("PaymentReviewer")
+  activities       ActivityLog[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([role])
+  @@index([disabledAt])
+}
+
+model Invitation {
+  id          String           @id @default(cuid())
+  title       String
+  slug        String           @unique
+  brideName   String
+  groomName   String
+  eventDate   DateTime
+  venue       String
+  address     String
+  description String?
+  coverImage  String?
+  templateId  String           @default("senja-di-ubud")
+  status      InvitationStatus @default(DRAFT)
+  ownerId     String
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  payments    Payment[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([ownerId, createdAt])
+  @@index([status])
+}
+
+model InvitationTemplate {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  style       String
+  description String?
+  coverImage  String?
+  color       String   @default("olive")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, createdAt])
+}
+
+model Payment {
+  id                   String        @id @default(cuid())
+  orderId              String        @unique
+  amount               Int
+  paymentCode          Int?
+  currency             String        @default("IDR")
+  bank                 String
+  status               PaymentStatus @default(PENDING)
+  vaNumber             String?
+  billKey              String?
+  billerCode           String?
+  gatewayTransactionId String?
+  expiresAt            DateTime?
+  proofPath            String?
+  proofMimeType        String?
+  submittedAt          DateTime?
+  paidAt               DateTime?
+  reviewedAt           DateTime?
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedById         String?
+  reviewedBy           User?         @relation("PaymentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  invitationId         String
+  invitation           Invitation    @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([invitationId, status])
+  @@index([status, submittedAt])
+}
+
+model ActivityLog {
+  id        String       @id @default(cuid())
+  type      ActivityType
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
